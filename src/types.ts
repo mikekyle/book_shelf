@@ -35,3 +35,13 @@ export interface ProjectionMeta {
     variance?: PcaVariance
   }>
 }
+
+// Raw shape returned by book_core `GET /api/v1/projections/meta`. Differs from
+// the normalized `ProjectionMeta` the UI consumes, so `api.ts` adapts it.
+export interface RawProjectionMeta {
+  pca_n_components?: number
+  pca_variance_explained?: number[]
+  layouts: string[]
+  book_count?: number
+  computed_at?: string
+}
