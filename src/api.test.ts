@@ -5,6 +5,7 @@ import {
   getShelf,
   isLiveApi,
   normalizeProjectionMeta,
+  resolveApiMode,
 } from './api'
 import { fixtureShelf } from './fixtures'
 
@@ -43,6 +44,39 @@ describe('book_shelf api (fixtures mode)', () => {
     expect(book?.id).toBe(first.id)
     expect(book?.description).toBeTruthy()
     expect(Array.isArray(book?.tags)).toBe(true)
+  })
+})
+
+describe('resolveApiMode', () => {
+  it('treats unset/empty as fixtures', () => {
+    expect(resolveApiMode(undefined)).toEqual({
+      isLive: false,
+      isSameOrigin: false,
+      apiBase: '',
+    })
+    expect(resolveApiMode('')).toEqual({
+      isLive: false,
+      isSameOrigin: false,
+      apiBase: '',
+    })
+  })
+
+  it('accepts same-origin tokens', () => {
+    for (const token of ['same-origin', '/', '.']) {
+      expect(resolveApiMode(token)).toEqual({
+        isLive: true,
+        isSameOrigin: true,
+        apiBase: '',
+      })
+    }
+  })
+
+  it('strips trailing slashes from absolute bases', () => {
+    expect(resolveApiMode('http://example.com:8002/')).toEqual({
+      isLive: true,
+      isSameOrigin: false,
+      apiBase: 'http://example.com:8002',
+    })
   })
 })
 

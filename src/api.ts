@@ -48,12 +48,26 @@ export function normalizeProjectionMeta(raw: RawProjectionMeta): ProjectionMeta 
   return { layouts }
 }
 
-const API_BASE = (import.meta.env.VITE_BOOK_CORE_API_BASE ?? '').replace(
-  /\/+$/,
-  '',
-)
+export function resolveApiMode(raw: string | undefined): {
+  isLive: boolean
+  isSameOrigin: boolean
+  apiBase: string
+} {
+  const value = (raw ?? '').trim()
+  const sameOrigin = value === 'same-origin' || value === '/' || value === '.'
+  if (sameOrigin) return { isLive: true, isSameOrigin: true, apiBase: '' }
+  const apiBase = value.replace(/\/+$/, '')
+  return { isLive: apiBase.length > 0, isSameOrigin: false, apiBase }
+}
 
-export const isLiveApi = API_BASE.length > 0
+// Resolve the book_core base URL.
+// - unset / empty → fixtures mode (offline)
+// - "same-origin" | "/" | "." → relative `/api/v1/...` (Oracle nginx proxy / GH Pages proxy)
+// - absolute URL → live remote API
+const resolved = resolveApiMode(import.meta.env.VITE_BOOK_CORE_API_BASE)
+export const isSameOriginApi = resolved.isSameOrigin
+const API_BASE = resolved.apiBase
+export const isLiveApi = resolved.isLive
 
 export interface ShelfQuery {
   layout: LayoutMode
