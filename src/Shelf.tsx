@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import type { PointerEvent as ReactPointerEvent, WheelEvent as ReactWheelEvent } from 'react'
 import type { ShelfItem } from './types'
+import { coverCounterScale } from './zoomCovers'
 
 // World-space dimensions the normalized layout is projected into.
 const WORLD_W = 1200
@@ -16,7 +17,7 @@ interface Transform {
 }
 
 const MIN_K = 0.4
-const MAX_K = 6
+const MAX_K = 8
 
 function coverColor(id: string): string {
   // Deterministic pleasant hue from the id so covers are distinguishable
@@ -142,6 +143,8 @@ export function Shelf({ items, selectedId, onSelect }: ShelfProps) {
 
   const reset = useCallback(() => setTransform({ x: 0, y: 0, k: 1 }), [])
 
+  const invK = coverCounterScale(transform.k)
+
   return (
     <div className="shelf">
       <svg
@@ -160,10 +163,16 @@ export function Shelf({ items, selectedId, onSelect }: ShelfProps) {
         <g transform={`translate(${transform.x} ${transform.y}) scale(${transform.k})`}>
           {placed.map((b) => {
             const selected = b.id === selectedId
+            // Translate to the book's layout point, then counter-scale so the
+            // cover glyph stays ~constant on screen while neighbours spread.
+            const coverTransform =
+              invK === 1
+                ? `translate(${b.wx - COVER_W / 2} ${b.wy - COVER_H / 2})`
+                : `translate(${b.wx} ${b.wy}) scale(${invK}) translate(${-COVER_W / 2} ${-COVER_H / 2})`
             return (
               <g
                 key={b.id}
-                transform={`translate(${b.wx - COVER_W / 2} ${b.wy - COVER_H / 2})`}
+                transform={coverTransform}
                 className="cover"
                 onClick={(e) => {
                   e.stopPropagation()
