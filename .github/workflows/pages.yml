@@ -1,0 +1,65 @@
+name: Deploy GitHub Pages
+
+on:
+  push:
+    branches: [master]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: pages
+  cancel-in-progress: true
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10.33.3
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+
+      - run: pnpm install --frozen-lockfile
+
+      - run: pnpm lint
+      - run: pnpm typecheck
+      - run: pnpm test
+
+      # Pages is HTTPS. Only inject a live API base when it is itself HTTPS
+      # (otherwise the browser blocks mixed content and the shelf falls back
+      # oddly). Leave unset → fixtures mode on Pages until book_core has a
+      # real cert; the Oracle same-origin deploy on :8003 is the live path.
+      - name: Build
+        env:
+          VITE_BOOK_CORE_API_BASE: ${{ secrets.VITE_BOOK_CORE_API_BASE }}
+        run: |
+          base="${VITE_BOOK_CORE_API_BASE:-}"
+          if [ -n "$base" ] && ! printf '%s' "$base" | grep -Eq '^(https://|same-origin|/|\.)$'; then
+            echo "Ignoring non-HTTPS VITE_BOOK_CORE_API_BASE for Pages build (mixed content)."
+            unset VITE_BOOK_CORE_API_BASE
+          fi
+          pnpm build
+
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: dist
+
+  deploy:
+    needs: build
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - id: deployment
+        uses: actions/deploy-pages@v4
