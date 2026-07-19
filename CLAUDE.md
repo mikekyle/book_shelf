@@ -6,8 +6,9 @@ Static visual bookshelf SPA. Pan/zoom canvas of book covers using precomputed 2D
 
 1. Read [`PLANNING.md`](PLANNING.md).
 2. Read [`api-contracts.md`](api-contracts.md) — keep in sync with `book_core` when the API solidifies.
-3. Do **not** put secrets in the client. Read-only calls to `book_core` only.
-4. Do **not** implement Telegram, enrichment, or database access here.
+3. Read [`BOOK_CORE_LIVE.md`](BOOK_CORE_LIVE.md) for the deployed base URL (port 8002) and integration quirks.
+4. Do **not** put secrets in the client. Read-only calls to `book_core` only.
+5. Do **not** implement Telegram, enrichment, or database access here.
 
 ## Stack (intended)
 
