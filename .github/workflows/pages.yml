@@ -36,17 +36,25 @@ jobs:
       - run: pnpm test
 
       # Pages is HTTPS. Only inject a live API base when it is itself HTTPS
-      # (otherwise the browser blocks mixed content and the shelf falls back
-      # oddly). Leave unset → fixtures mode on Pages until book_core has a
-      # real cert; the Oracle same-origin deploy on :8003 is the live path.
+      # (or same-origin). Plain HTTP is ignored to avoid mixed-content builds.
       - name: Build
         env:
           VITE_BOOK_CORE_API_BASE: ${{ secrets.VITE_BOOK_CORE_API_BASE }}
         run: |
           base="${VITE_BOOK_CORE_API_BASE:-}"
-          if [ -n "$base" ] && ! printf '%s' "$base" | grep -Eq '^(https://|same-origin|/|\.)$'; then
+          allow=0
+          case "$base" in
+            https://*|same-origin|/|.) allow=1 ;;
+          esac
+          if [ -n "$base" ] && [ "$allow" -ne 1 ]; then
             echo "Ignoring non-HTTPS VITE_BOOK_CORE_API_BASE for Pages build (mixed content)."
             unset VITE_BOOK_CORE_API_BASE
+            base=""
+          fi
+          if [ -n "$base" ]; then
+            echo "Building with live API base (${base%%://*}://…)."
+          else
+            echo "Building with fixtures (no live API base)."
           fi
           pnpm build
 
