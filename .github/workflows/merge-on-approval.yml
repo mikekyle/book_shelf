@@ -1,0 +1,76 @@
+# Merge-on-pass: deterministic squash-merge when a PR is BOTH approved by the
+# Cursor reviewer (or the owner) AND all checks are green.
+#
+# Part of the ways-of-working pipeline (mikekyle/py_projects — WAYS_OF_WORKING.md).
+# CI is the mechanical truth, the reviewer is the judgment; this Action is the
+# AND-gate. It triggers on either input arriving (review submitted / check suite
+# completed) and sweeps all open PRs, so the order of approval vs CI never matters.
+# No LLM, no cost.
+#
+# Free-plan private repos have no auto-merge feature or branch protection,
+# so this performs a plain squash merge directly.
+
+name: Merge on approval
+
+on:
+  pull_request_review:
+    types: [submitted]
+  check_suite:
+    types: [completed]
+
+permissions:
+  contents: write
+  pull-requests: write
+  checks: read
+
+concurrency:
+  group: merge-on-approval
+  cancel-in-progress: false
+
+jobs:
+  merge:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Merge every open PR that is approved with green checks
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          REPO: ${{ github.repository }}
+        run: |
+          set -uo pipefail
+
+          # A PR qualifies when: not draft, no needs-human label, and among
+          # reviews by allowlisted identities the latest per author includes
+          # an APPROVED and no outstanding CHANGES_REQUESTED.
+          numbers=$(gh pr list --repo "$REPO" --state open \
+            --json number,isDraft,labels,latestReviews | jq -r '
+            .[]
+            | select(.isDraft | not)
+            | select(([.labels[].name] | index("needs-human")) | not)
+            | ([.latestReviews[]
+                | select(.author.login as $a
+                    | ["cursor", "cursor[bot]", "mikekyle"] | index($a))]) as $r
+            | select(($r | map(select(.state == "APPROVED"))          | length) > 0)
+            | select(($r | map(select(.state == "CHANGES_REQUESTED")) | length) == 0)
+            | .number')
+
+          [ -z "$numbers" ] && { echo "No approved PRs to consider."; exit 0; }
+
+          for n in $numbers; do
+            if checks_output=$(gh pr checks "$n" --repo "$REPO" 2>&1); then
+              checks_ok=1                       # all checks passed
+            elif echo "$checks_output" | grep -qi "no checks"; then
+              checks_ok=1                       # repo/PR has no checks — nothing to gate on
+            else
+              checks_ok=0                       # failing or still pending
+            fi
+
+            if [ "$checks_ok" = "1" ]; then
+              if gh pr merge "$n" --repo "$REPO" --squash --delete-branch; then
+                echo "Merged #$n"
+              else
+                echo "::warning::Merge failed for #$n"
+              fi
+            else
+              echo "Skipping #$n — checks failing or pending (will retry on next check_suite completion)"
+            fi
+          done
