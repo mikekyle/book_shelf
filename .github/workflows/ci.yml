@@ -26,5 +26,6 @@ jobs:
         if: always()
         continue-on-error: true
         env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          # Cursor ignores comments from github-actions[bot]. Post as the owner.
+          GH_TOKEN: ${{ secrets.CURSOR_GITHUB_PAT }}
         run: gh pr comment ${{ github.event.pull_request.number }} --body "/review"
