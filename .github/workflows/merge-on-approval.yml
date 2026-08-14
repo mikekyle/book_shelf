@@ -1,14 +1,17 @@
-# Merge-on-pass: deterministic squash-merge when a PR is BOTH approved by the
-# Cursor reviewer (or the owner) AND all checks are green.
+# Pipeline gates that must not depend on Cursor seeing bot events.
+#
+# 1. request-fix — when the Reviewer (cursor) requests changes, post `/fix`
+#    as the owner. Cursor automations ignore reviews and comments from bots
+#    (including cursor[bot] and github-actions[bot]), so the Fixer cannot
+#    trigger on "changes requested" directly.
+# 2. merge — deterministic squash-merge when a PR is BOTH approved by the
+#    Cursor reviewer (or the owner) AND all checks are green.
 #
 # Part of the ways-of-working pipeline (mikekyle/py_projects — WAYS_OF_WORKING.md).
-# CI is the mechanical truth, the reviewer is the judgment; this Action is the
-# AND-gate. It triggers on either input arriving (review submitted / check suite
-# completed) and sweeps all open PRs, so the order of approval vs CI never matters.
 # No LLM, no cost.
 #
 # Free-plan private repos have no auto-merge feature or branch protection,
-# so this performs a plain squash merge directly.
+# so merge performs a plain squash merge directly.
 
 name: Merge on approval
 
@@ -28,6 +31,29 @@ concurrency:
   cancel-in-progress: false
 
 jobs:
+  request-fix:
+    if: github.event_name == 'pull_request_review' && github.event.review.state == 'changes_requested'
+    runs-on: ubuntu-latest
+    permissions:
+      pull-requests: write
+    steps:
+      - name: Request fix
+        continue-on-error: true
+        env:
+          GH_TOKEN: ${{ secrets.CURSOR_GITHUB_PAT }}
+          AUTHOR: ${{ github.event.review.user.login }}
+          PR: ${{ github.event.pull_request.number }}
+        run: |
+          set -eu
+          case "$AUTHOR" in
+            cursor|'cursor[bot]'|mikekyle)
+              gh pr comment "$PR" --body "/fix"
+              ;;
+            *)
+              echo "Ignoring changes_requested from $AUTHOR"
+              ;;
+          esac
+
   merge:
     runs-on: ubuntu-latest
     steps:
