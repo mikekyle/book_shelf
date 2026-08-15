@@ -20,6 +20,7 @@ on:
     types: [submitted]
   check_suite:
     types: [completed]
+  workflow_dispatch:
 
 permissions:
   contents: write
@@ -82,21 +83,26 @@ jobs:
           [ -z "$numbers" ] && { echo "No approved PRs to consider."; exit 0; }
 
           for n in $numbers; do
-            if checks_output=$(gh pr checks "$n" --repo "$REPO" 2>&1); then
-              checks_ok=1                       # all checks passed
-            elif echo "$checks_output" | grep -qi "no checks"; then
-              checks_ok=1                       # repo/PR has no checks — nothing to gate on
-            else
-              checks_ok=0                       # failing or still pending
-            fi
+            # Mechanical gate is traditional CI only. Ignore:
+            # - this workflow's own jobs (otherwise we wait on ourselves)
+            # - Cursor Automation:* (Reviewer stays "in progress" after it
+            #   has already approved; judgment is the review, not that check)
+            checks_json=$(gh pr checks "$n" --repo "$REPO" --json name,bucket 2>/dev/null || echo '[]')
+            blocking=$(printf '%s' "$checks_json" | jq -r '
+              [.[]
+                | select(.name != "merge" and .name != "request-fix")
+                | select(.name | startswith("Cursor Automation") | not)
+                | select(.bucket != "pass" and .bucket != "skipping")
+                | "\(.name) (\(.bucket))"]
+              | join(", ")')
 
-            if [ "$checks_ok" = "1" ]; then
+            if [ -z "$blocking" ]; then
               if gh pr merge "$n" --repo "$REPO" --squash --delete-branch; then
                 echo "Merged #$n"
               else
                 echo "::warning::Merge failed for #$n"
               fi
             else
-              echo "Skipping #$n — checks failing or pending (will retry on next check_suite completion)"
+              echo "Skipping #$n — blocking checks: ${blocking:-none} (will retry on next check_suite / workflow_dispatch)"
             fi
           done
