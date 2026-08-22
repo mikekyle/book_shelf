@@ -39,16 +39,17 @@ jobs:
       pull-requests: write
     steps:
       - name: Request fix
-        continue-on-error: true
         env:
           GH_TOKEN: ${{ secrets.CURSOR_GITHUB_PAT }}
           AUTHOR: ${{ github.event.review.user.login }}
           PR: ${{ github.event.pull_request.number }}
+          REPO: ${{ github.repository }}
         run: |
           set -eu
           case "$AUTHOR" in
             cursor|'cursor[bot]'|mikekyle)
-              gh pr comment "$PR" --body "/fix"
+              # No checkout here; without --repo, gh looks for a git remote and fails.
+              gh pr comment "$PR" --repo "$REPO" --body "/fix"
               ;;
             *)
               echo "Ignoring changes_requested from $AUTHOR"
